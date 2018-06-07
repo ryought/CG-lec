@@ -25,18 +25,38 @@ var is_dragging = false;
 
 function update_position() {
     linkages.forEach(function(linkage, index){
-        linkage.position = [0, 0];
+        linkage.position = [0, 0, 0];
         var angle_sum = 0;
         for (var j = 0; j <= index; ++j) {
             angle_sum += linkages[j].angle;
             linkage.position[0] += linkages[j].length * Math.cos(angle_sum * Math.PI / 180);
             linkage.position[1] += linkages[j].length * Math.sin(angle_sum * Math.PI / 180);
+            linkage.position[2] = 0
         }
     });
 };
 
 function compute_ik(target_position) {
     // TODO
+    // 末端の3から角度を調節していく
+    for (var i = 3; i >= 0; i--) {
+        // 調節する角度 theta
+        // 先っぽ x1 = linkage[3].position
+        // 目標 x2 = target_position
+        // 回転中心 x3 = linkage[i-1].position
+        // linkage[i].angleを x1-x3, x2-x3 のなす角だけ変化させる
+        var v1 = linkages[3].position
+        var v2 = target_position
+        if ( i > 0 ) {
+            v1 = numeric.sub(linkages[3].position, linkages[i-1].position)
+            v2 = numeric.sub(target_position,      linkages[i-1].position)
+        }
+        // 面積 S = (v1 x v2) / 2 = (|v1| |v2| sin \theta ) / 2 から求める
+        var sin = ((v1[0] * v2[1]) - (v2[0] * v1[1])) / (numeric.norm2(v1) * numeric.norm2(v2))
+        var theta = Math.asin(sin) / (2 * Math.PI) * 360
+        linkages[i].angle += theta
+        update_position();
+    }
 };
 
 function draw() {
@@ -45,12 +65,12 @@ function draw() {
     mat4.perspective(legacygl.uniforms.projection.value, Math.PI / 6, canvas.aspect_ratio(), 0.1, 1000);
     var modelview = legacygl.uniforms.modelview;
     camera.lookAt(modelview.value);
-    
+
     // xy grid
     gl.lineWidth(1);
     legacygl.color(0.5, 0.5, 0.5);
     drawutil.xygrid(100);
-    
+
     // linkages
     var selected = Number(document.getElementById("input_selected").value);
     legacygl.begin(gl.LINES);
@@ -135,7 +155,7 @@ function init() {
         if (!is_dragging) return;
         var viewport = [0, 0, canvas.width, canvas.height];
         mouse_win.push(1);
-        var mouse_obj = glu.unproject(mouse_win, 
+        var mouse_obj = glu.unproject(mouse_win,
                                       legacygl.uniforms.modelview.value,
                                       legacygl.uniforms.projection.value,
                                       viewport);
@@ -184,7 +204,7 @@ function init() {
     <ul>
     <li>Selected Linkage: <input type="number" id="input_selected" step="1" min="0" value="0"></li>
     <li>Selected Linkage's Angle: <input type="number" id="input_angle" step="5" value="0"></li>
-    <li><input type="checkbox" id="input_ikmode"> IK Mode</li>
+    <li><input type="checkbox" id="input_ikmode" checked> IK Mode</li>
     <li>Usage:</li>
     <ul>
         <li>Drag: Perform IK</li>
